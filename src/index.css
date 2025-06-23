@@ -4,12 +4,30 @@
 
 body {
   font-family: 'Inter', sans-serif;
+  /* Prevent scroll when modals are open */
+  overflow-x: hidden;
 }
 
 .font-display {
   font-family: 'Space Grotesk', sans-serif;
 }
 
+/* Performance optimizations */
+* {
+  /* Use hardware acceleration for transforms */
+  transform: translateZ(0);
+  /* Optimize repaints */
+  will-change: auto;
+}
+
+/* Smooth scrolling with reduced motion support */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Animations */
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
@@ -29,6 +47,11 @@ body {
 @keyframes pulse-gentle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
 }
 
 .animate-float {
@@ -53,6 +76,18 @@ body {
 
 .animation-delay-4000 {
   animation-delay: 4s;
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+  background-size: 200px 100%;
 }
 
 /* Glassmorphism utilities */
@@ -93,9 +128,65 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-/* Enhanced transitions */
+/* Enhanced transitions with performance optimization */
 * {
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
+}
+
+/* Modal scroll containment */
+.modal-content {
+  overscroll-behavior: contain;
+}
+
+/* Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Optimize font rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .bg-gradient-to-r {
+    background: solid;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
 }

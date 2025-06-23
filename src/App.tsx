@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { 
@@ -15,23 +15,57 @@ import {
   ArrowRight,
   Inbox,
   Plus,
-  Check
+  Check,
+  Github,
+  MessageSquare
 } from 'lucide-react';
 import { InboxManager } from './components/InboxManager';
 import { MessageViewer } from './components/MessageViewer';
-import { BlogModal } from './components/BlogModal';
 import { ThemeToggle } from './components/ThemeToggle';
 import { AdSenseAd } from './components/AdSenseAd';
-import { blogPosts } from './data/blog';
+import { LoadingSkeleton } from './components/LoadingSkeleton';
+
+// Lazy load components for better performance
+const BlogModal = lazy(() => import('./components/BlogModal').then(module => ({ default: module.BlogModal })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
     },
   },
 });
+
+// Lazy loading wrapper component
+function LazySection({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [ref, setRef] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!ref) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '100px' }
+    );
+
+    observer.observe(ref);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return (
+    <div ref={setRef}>
+      {isVisible ? children : (fallback || <LoadingSkeleton />)}
+    </div>
+  );
+}
 
 function AppContent() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -39,22 +73,32 @@ function AppContent() {
   const [activeBlogModal, setActiveBlogModal] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [showInboxManager, setShowInboxManager] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false); // Animation state
+  const [modalVisible, setModalVisible] = useState(false);
 
-  // Debug: Log when modal opens
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (showInboxManager || selectedMessageId || activeBlogModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showInboxManager, selectedMessageId, activeBlogModal]);
+
   useEffect(() => {
     if (showInboxManager) {
-      console.log('Modal opened.');
       setTimeout(() => setModalVisible(true), 10);
     } else {
       setModalVisible(false);
     }
   }, [showInboxManager]);
 
-  // Only unmount modal after exit animation
   const handleCloseModal = () => {
     setModalVisible(false);
-    setTimeout(() => setShowInboxManager(false), 300); // Match duration-300
+    setTimeout(() => setShowInboxManager(false), 300);
   };
 
   useEffect(() => {
@@ -74,8 +118,6 @@ function AppContent() {
     setIsMenuOpen(false);
   };
 
-  const activeBlogPost = blogPosts.find(p => p.id === activeBlogModal);
-
   // Load AdSense script on component mount
   useEffect(() => {
     const script = document.createElement('script');
@@ -85,7 +127,6 @@ function AppContent() {
     document.head.appendChild(script);
 
     return () => {
-      // Cleanup script on unmount
       const existingScript = document.querySelector('script[src*="adsbygoogle.js"]');
       if (existingScript) {
         document.head.removeChild(existingScript);
@@ -110,8 +151,13 @@ function AppContent() {
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="font-display font-bold text-2xl bg-gradient-to-r from-violet-600 to-cyan-600 bg-clip-text text-transparent">
-              FlashMail
+            <div className="flex flex-col">
+              <div className="font-display font-bold text-2xl bg-gradient-to-r from-violet-600 to-cyan-600 bg-clip-text text-transparent">
+                TempInbox
+              </div>
+              <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                Built with privacy in mind
+              </div>
             </div>
             
             {/* Desktop Navigation */}
@@ -163,18 +209,15 @@ function AppContent() {
 
       {/* Inbox Manager Modal */}
       {(showInboxManager || modalVisible) && (
-        <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out ${modalVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        >
-          <div
-            className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200/50 dark:border-slate-700/50 transform transition-all duration-300 ease-in-out ${modalVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-          >
-            <div className="flex items-center justify-between p-6 border-b border-slate-200/50 dark:border-slate-700/50">
+        <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out ${modalVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          <div className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200/50 dark:border-slate-700/50 transform transition-all duration-300 ease-in-out flex flex-col ${modalVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex-shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl text-white">
                   <Inbox className="w-5 h-5" />
                 </div>
                 <h3 className="font-display text-xl font-bold text-slate-800 dark:text-slate-200">
-                  FlashMail Inbox
+                  TempInbox
                 </h3>
               </div>
               <button
@@ -184,7 +227,7 @@ function AppContent() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <div className="flex-1 overflow-y-auto p-6">
               <InboxManager onMessageSelect={setSelectedMessageId} />
             </div>
           </div>
@@ -218,7 +261,7 @@ function AppContent() {
           
           <h1 className="font-display text-5xl md:text-7xl font-bold mb-6">
             <span className="bg-gradient-to-r from-violet-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent">
-              FlashMail
+              TempInbox
             </span>
           </h1>
           
@@ -227,16 +270,12 @@ function AppContent() {
           </p>
           
           <button 
-            onClick={() => {
-              setShowInboxManager(true);
-            }}
+            onClick={() => setShowInboxManager(true)}
             className="group bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold py-4 px-8 rounded-2xl text-lg shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none transition-all duration-300 relative overflow-hidden"
           >
             <span className="relative z-10 flex items-center">
-              <>
-                <Plus className="mr-2 w-5 h-5" />
-                Create Inbox
-              </>
+              <Plus className="mr-2 w-5 h-5" />
+              Create Inbox
             </span>
             <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-teal-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           </button>
@@ -244,269 +283,264 @@ function AppContent() {
       </section>
       
       {/* How It Works */}
-      <section id="howitworks" className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          {/* 2 Ad slots in section */}
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {[1,2].map((i) => (
-              <div key={`howitworks-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
-                <AdSenseAd
-                  client="ca-pub-1369369221989066"
-                  slot={`howitworks-${i}`}
-                  format="auto"
-                  responsive={true}
-                  style={{ display: 'block', width: '100%', minHeight: '90px' }}
-                />
-              </div>
-            ))}
-          </div>
-          
-          <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-            How It Works
-          </h2>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <Zap className="w-8 h-8" />,
-                title: "Create Inbox",
-                description: "One click, no login required",
-                color: "from-violet-500 to-purple-500"
-              },
-              {
-                icon: <Copy className="w-8 h-8" />,
-                title: "Copy & Use",
-                description: "Anywhere, anytime you need it",
-                color: "from-cyan-500 to-teal-500"
-              },
-              {
-                icon: <RefreshCw className="w-8 h-8" />,
-                title: "Receive Instantly",
-                description: "Real-time updates, no waiting",
-                color: "from-orange-500 to-pink-500"
-              }
-            ].map((step, index) => (
-              <div
-                key={index}
-                className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-8 rounded-3xl shadow-lg hover:shadow-2xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-500 hover:-translate-y-2"
-              >
-                <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-r ${step.color} text-white mb-6 group-hover:scale-110 transition-transform duration-300`}>
-                  {step.icon}
+      <LazySection>
+        <section id="howitworks" className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-7xl mx-auto">
+            {/* 2 Ad slots in section */}
+            <div className="flex flex-wrap justify-center gap-4 mb-8">
+              {[1,2].map((i) => (
+                <div key={`howitworks-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
+                  <AdSenseAd
+                    client="ca-pub-1369369221989066"
+                    slot={`howitworks-${i}`}
+                    format="auto"
+                    responsive={true}
+                    style={{ display: 'block', width: '100%', minHeight: '90px' }}
+                  />
                 </div>
-                <h3 className="font-display text-xl font-bold text-slate-800 dark:text-slate-200 mb-4">
-                  {step.title}
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-                  {step.description}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
+            
+            <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              How It Works
+            </h2>
+            
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                {
+                  icon: <Zap className="w-8 h-8" />,
+                  title: "Create Inbox",
+                  description: "One click, no login required",
+                  color: "from-violet-500 to-purple-500"
+                },
+                {
+                  icon: <Copy className="w-8 h-8" />,
+                  title: "Copy & Use",
+                  description: "Anywhere, anytime you need it",
+                  color: "from-cyan-500 to-teal-500"
+                },
+                {
+                  icon: <RefreshCw className="w-8 h-8" />,
+                  title: "Receive Instantly",
+                  description: "Real-time updates, no waiting",
+                  color: "from-orange-500 to-pink-500"
+                }
+              ].map((step, index) => (
+                <div
+                  key={index}
+                  className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-8 rounded-3xl shadow-lg hover:shadow-2xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-500 hover:-translate-y-2"
+                >
+                  <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-r ${step.color} text-white mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                    {step.icon}
+                  </div>
+                  <h3 className="font-display text-xl font-bold text-slate-800 dark:text-slate-200 mb-4">
+                    {step.title}
+                  </h3>
+                  <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                    {step.description}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </LazySection>
+
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          {/* 2 Ad slots in section */}
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {[1,2].map((i) => (
-              <div key={`features-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
-                <AdSenseAd
-                  client="ca-pub-1369369221989066"
-                  slot={`features-${i}`}
-                  format="auto"
-                  responsive={true}
-                  style={{ display: 'block', width: '100%', minHeight: '90px' }}
-                />
-              </div>
-            ))}
-          </div>
-          
-          <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-            Features That Matter
-          </h2>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: <Zap className="w-6 h-6" />,
-                title: "Instant Inbox",
-                description: "Create temporary inboxes in milliseconds",
-                gradient: "from-violet-500 to-purple-500"
-              },
-              {
-                icon: <RefreshCw className="w-6 h-6" />,
-                title: "Real-time Loading",
-                description: "Emails appear instantly as they arrive",
-                gradient: "from-cyan-500 to-teal-500"
-              },
-              {
-                icon: <Copy className="w-6 h-6" />,
-                title: "One-click Copy",
-                description: "Copy email addresses with a single click",
-                gradient: "from-orange-500 to-pink-500"
-              },
-              {
-                icon: <Shield className="w-6 h-6" />,
-                title: "No Account Needed",
-                description: "Anonymous and completely registration-free",
-                gradient: "from-green-500 to-emerald-500"
-              },
-              {
-                icon: <Sparkles className="w-6 h-6" />,
-                title: "Built-in Anonymity",
-                description: "Your privacy is protected by design",
-                gradient: "from-blue-500 to-indigo-500"
-              },
-              {
-                icon: <Clock className="w-6 h-6" />,
-                title: "Auto-expiry",
-                description: "Inboxes clean up automatically",
-                gradient: "from-red-500 to-rose-500"
-              }
-            ].map((feature, index) => (
-              <div
-                key={index}
-                className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:shadow-xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className={`inline-flex p-3 rounded-xl bg-gradient-to-r ${feature.gradient} text-white mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                  {feature.icon}
+      <LazySection>
+        <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-7xl mx-auto">
+            {/* 2 Ad slots in section */}
+            <div className="flex flex-wrap justify-center gap-4 mb-8">
+              {[1,2].map((i) => (
+                <div key={`features-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
+                  <AdSenseAd
+                    client="ca-pub-1369369221989066"
+                    slot={`features-${i}`}
+                    format="auto"
+                    responsive={true}
+                    style={{ display: 'block', width: '100%', minHeight: '90px' }}
+                  />
                 </div>
-                <h3 className="font-display text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                  {feature.description}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
+            
+            <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              Features That Matter
+            </h2>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  icon: <Zap className="w-6 h-6" />,
+                  title: "Instant Inbox",
+                  description: "Create temporary inboxes in milliseconds",
+                  gradient: "from-violet-500 to-purple-500"
+                },
+                {
+                  icon: <RefreshCw className="w-6 h-6" />,
+                  title: "Real-time Loading",
+                  description: "Emails appear instantly as they arrive",
+                  gradient: "from-cyan-500 to-teal-500"
+                },
+                {
+                  icon: <Copy className="w-6 h-6" />,
+                  title: "One-click Copy",
+                  description: "Copy email addresses with a single click",
+                  gradient: "from-orange-500 to-pink-500"
+                },
+                {
+                  icon: <Shield className="w-6 h-6" />,
+                  title: "No Account Needed",
+                  description: "Anonymous and completely registration-free",
+                  gradient: "from-green-500 to-emerald-500"
+                },
+                {
+                  icon: <Sparkles className="w-6 h-6" />,
+                  title: "Built-in Anonymity",
+                  description: "Your privacy is protected by design",
+                  gradient: "from-blue-500 to-indigo-500"
+                },
+                {
+                  icon: <Clock className="w-6 h-6" />,
+                  title: "Auto-expiry",
+                  description: "Inboxes clean up automatically",
+                  gradient: "from-red-500 to-rose-500"
+                }
+              ].map((feature, index) => (
+                <div
+                  key={index}
+                  className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:shadow-xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1"
+                >
+                  <div className={`inline-flex p-3 rounded-xl bg-gradient-to-r ${feature.gradient} text-white mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                    {feature.icon}
+                  </div>
+                  <h3 className="font-display text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                    {feature.title}
+                  </h3>
+                  <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </LazySection>
+
       {/* Free Forever Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="max-w-4xl mx-auto">
-          {/* 2 Ad slots in section */}
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {[1,2].map((i) => (
-              <div key={`freeforever-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
-                <AdSenseAd
-                  client="ca-pub-1369369221989066"
-                  slot={`freeforever-${i}`}
-                  format="auto"
-                  responsive={true}
-                  style={{ display: 'block', width: '100%', minHeight: '90px' }}
-                />
-              </div>
-            ))}
-          </div>
-          
-          <div className="bg-gradient-to-r from-violet-600 to-purple-600 p-12 rounded-3xl shadow-2xl border border-violet-200/20 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/10 to-teal-600/10"></div>
-            <div className="relative z-10 text-center">
-              <div className="inline-flex p-4 bg-white/20 rounded-2xl mb-6">
-                <Heart className="w-8 h-8 text-white animate-pulse-gentle" />
-              </div>
-              <h2 className="font-display text-3xl md:text-4xl font-bold text-white mb-6">
-                Always Free. No Signups. No Hidden Fees.
-              </h2>
-              <p className="text-xl text-white/90 mb-8 leading-relaxed">
-                FlashMail is committed to providing free temporary email services. 
-                We're supported by privacy-respecting, non-intrusive advertisements.
-              </p>
-              <div className="flex flex-wrap justify-center gap-4 text-white/90">
-                <div className="flex items-center">
-                  <Check className="w-5 h-5 mr-2" />
-                  <span>Privacy-first policies</span>
+      <LazySection>
+        <section className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-4xl mx-auto">
+            {/* 2 Ad slots in section */}
+            <div className="flex flex-wrap justify-center gap-4 mb-8">
+              {[1,2].map((i) => (
+                <div key={`freeforever-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
+                  <AdSenseAd
+                    client="ca-pub-1369369221989066"
+                    slot={`freeforever-${i}`}
+                    format="auto"
+                    responsive={true}
+                    style={{ display: 'block', width: '100%', minHeight: '90px' }}
+                  />
                 </div>
-                <div className="flex items-center">
-                  <Check className="w-5 h-5 mr-2" />
-                  <span>No data collection</span>
+              ))}
+            </div>
+            
+            <div className="bg-gradient-to-r from-violet-600 to-purple-600 p-12 rounded-3xl shadow-2xl border border-violet-200/20 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/10 to-teal-600/10"></div>
+              <div className="relative z-10 text-center">
+                <div className="inline-flex p-4 bg-white/20 rounded-2xl mb-6">
+                  <Heart className="w-8 h-8 text-white animate-pulse-gentle" />
                 </div>
-                <div className="flex items-center">
-                  <Check className="w-5 h-5 mr-2" />
-                  <span>Open source friendly</span>
+                <h2 className="font-display text-3xl md:text-4xl font-bold text-white mb-6">
+                  Always Free. No Signups. No Hidden Fees.
+                </h2>
+                <p className="text-xl text-white/90 mb-8 leading-relaxed">
+                  TempInbox is committed to providing free temporary email services. 
+                  We're supported by privacy-respecting, non-intrusive advertisements.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 text-white/90">
+                  <div className="flex items-center">
+                    <Check className="w-5 h-5 mr-2" />
+                    <span>Privacy-first policies</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Check className="w-5 h-5 mr-2" />
+                    <span>No data collection</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Check className="w-5 h-5 mr-2" />
+                    <span>Open source friendly</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </LazySection>
+
       {/* Blog Section */}
-      <section id="blog" className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          {/* 2 Ad slots in section */}
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {[1,2].map((i) => (
-              <div key={`blog-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
-                <AdSenseAd
-                  client="ca-pub-1369369221989066"
-                  slot={`blog-${i}`}
-                  format="auto"
-                  responsive={true}
-                  style={{ display: 'block', width: '100%', minHeight: '90px' }}
-                />
-              </div>
-            ))}
-          </div>
-          
-          <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-            Latest Insights
-          </h2>
-          
-          <div className="grid md:grid-cols-2 gap-8">
-            {blogPosts.map((post) => (
-              <article
-                key={post.id}
-                className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-8 rounded-2xl shadow-lg hover:shadow-xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1 cursor-pointer"
-                onClick={() => setActiveBlogModal(post.id)}
-              >
-                <div className="flex items-center space-x-3 mb-4">
-                  <span className="text-2xl">{post.emoji}</span>
-                  <div className="text-sm text-slate-500 dark:text-slate-400">
-                    <span>{post.readingTime} min read</span>
-                    <span className="mx-2">•</span>
-                    <span>{post.publishedAt}</span>
-                  </div>
+      <LazySection>
+        <section id="blog" className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-7xl mx-auto">
+            {/* 2 Ad slots in section */}
+            <div className="flex flex-wrap justify-center gap-4 mb-8">
+              {[1,2].map((i) => (
+                <div key={`blog-ad-${i}`} className="w-full sm:w-1/2 md:w-1/4 p-2 flex justify-center">
+                  <AdSenseAd
+                    client="ca-pub-1369369221989066"
+                    slot={`blog-${i}`}
+                    format="auto"
+                    responsive={true}
+                    style={{ display: 'block', width: '100%', minHeight: '90px' }}
+                  />
                 </div>
-                <h3 className="font-display text-xl font-bold text-slate-800 dark:text-slate-200 mb-4 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors duration-200">
-                  {post.title}
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
-                  {post.excerpt}
-                </p>
-                <button className="inline-flex items-center text-violet-600 dark:text-violet-400 font-medium group-hover:text-violet-700 dark:group-hover:text-violet-300 transition-colors duration-200">
-                  Read More
-                  <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
-                </button>
-              </article>
-            ))}
+              ))}
+            </div>
+            
+            <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              Latest Insights
+            </h2>
+            
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Blog posts will be loaded lazily */}
+              <Suspense fallback={<LoadingSkeleton />}>
+                <BlogPostsGrid onPostSelect={setActiveBlogModal} />
+              </Suspense>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </LazySection>
+
       {/* Footer */}
       <footer className="py-16 px-4 sm:px-6 lg:px-8 relative z-10 border-t border-slate-200/50 dark:border-slate-700/50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <div className="font-display text-2xl font-bold bg-gradient-to-r from-violet-600 to-cyan-600 bg-clip-text text-transparent mb-4">
-              FlashMail
+              TempInbox
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-lg max-w-2xl mx-auto">
               Making email privacy accessible, one temporary inbox at a time.
             </p>
           </div>
           
-          <div className="text-center text-slate-500 dark:text-slate-500 text-sm space-y-2">
-            <p>© {new Date().getFullYear()} FlashMail. Built with privacy in mind.</p>
-            <div className="space-x-6">
-              <button className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                Privacy Policy
+          <div className="text-center text-slate-500 dark:text-slate-500 text-sm space-y-4">
+            <p>© {new Date().getFullYear()} TempInbox.</p>
+            <div className="flex justify-center items-center space-x-6">
+              <button 
+                onClick={() => window.open('mailto:feedback@tempinbox.com', '_blank')}
+                className="inline-flex items-center space-x-2 text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Give Feedback</span>
               </button>
-              <button className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                Terms of Service
-              </button>
-              <button className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                Contact
+              <button 
+                onClick={() => window.open('https://github.com/airdropcodex/blaze-mail', '_blank')}
+                className="inline-flex items-center space-x-2 text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+              >
+                <Github className="w-4 h-4" />
+                <span>GitHub</span>
               </button>
             </div>
           </div>
@@ -514,10 +548,14 @@ function AppContent() {
       </footer>
 
       {/* Modals */}
-      <BlogModal 
-        post={activeBlogPost || null} 
-        onClose={() => setActiveBlogModal(null)} 
-      />
+      <Suspense fallback={null}>
+        {activeBlogModal && (
+          <BlogModal 
+            postId={activeBlogModal}
+            onClose={() => setActiveBlogModal(null)} 
+          />
+        )}
+      </Suspense>
       
       <MessageViewer 
         messageId={selectedMessageId} 
@@ -539,6 +577,42 @@ function AppContent() {
         }}
       />
     </div>
+  );
+}
+
+// Lazy loaded blog posts component
+function BlogPostsGrid({ onPostSelect }: { onPostSelect: (id: string) => void }) {
+  const { blogPosts } = require('../data/blog');
+  
+  return (
+    <>
+      {blogPosts.map((post: any) => (
+        <article
+          key={post.id}
+          className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-8 rounded-2xl shadow-lg hover:shadow-xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+          onClick={() => onPostSelect(post.id)}
+        >
+          <div className="flex items-center space-x-3 mb-4">
+            <span className="text-2xl">{post.emoji}</span>
+            <div className="text-sm text-slate-500 dark:text-slate-400">
+              <span>{post.readingTime} min read</span>
+              <span className="mx-2">•</span>
+              <span>{post.publishedAt}</span>
+            </div>
+          </div>
+          <h3 className="font-display text-xl font-bold text-slate-800 dark:text-slate-200 mb-4 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors duration-200">
+            {post.title}
+          </h3>
+          <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+            {post.excerpt}
+          </p>
+          <button className="inline-flex items-center text-violet-600 dark:text-violet-400 font-medium group-hover:text-violet-700 dark:group-hover:text-violet-300 transition-colors duration-200">
+            Read More
+            <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
+          </button>
+        </article>
+      ))}
+    </>
   );
 }
 
