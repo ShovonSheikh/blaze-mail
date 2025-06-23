@@ -24,6 +24,7 @@ import { MessageViewer } from './components/MessageViewer';
 import { ThemeToggle } from './components/ThemeToggle';
 import { AdSenseAd } from './components/AdSenseAd';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
+import { blogPosts } from './data/blog';
 
 // Lazy load components for better performance
 const BlogModal = lazy(() => import('./components/BlogModal').then(module => ({ default: module.BlogModal })));
@@ -582,8 +583,6 @@ function AppContent() {
 
 // Lazy loaded blog posts component
 function BlogPostsGrid({ onPostSelect }: { onPostSelect: (id: string) => void }) {
-  const { blogPosts } = require('../data/blog');
-  
   return (
     <>
       {blogPosts.map((post: any) => (
