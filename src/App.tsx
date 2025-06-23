@@ -581,11 +581,21 @@ function AppContent() {
   );
 }
 
+// Blog post type definition
+interface BlogPost {
+  id: string;
+  emoji: string;
+  readingTime: number;
+  publishedAt: string;
+  title: string;
+  excerpt: string;
+}
+
 // Lazy loaded blog posts component
 function BlogPostsGrid({ onPostSelect }: { onPostSelect: (id: string) => void }) {
   return (
     <>
-      {blogPosts.map((post: any) => (
+      {blogPosts.map((post: BlogPost) => (
         <article
           key={post.id}
           className="group bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm p-8 rounded-2xl shadow-lg hover:shadow-xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1 cursor-pointer"
